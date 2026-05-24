@@ -1,0 +1,92 @@
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: ${APP_NAME:-app}_mysql
+
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+
+    ports:
+      - "${DB_PORT:-3306}:3306"
+
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "--silent" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    networks:
+      - docker_stack_network
+
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.multi
+    container_name: ${APP_NAME:-app}_spring
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+    networks:
+      - docker_stack_network
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+
+    restart: unless-stopped
+
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:${DB_PORT}/${DB_DATABASE}${DB_JDBC_OPTS}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      JAVA_OPTS: ${JAVA_OPTS}
+
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/sb-docker-stack/api/v1/status || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  mysql_data:
+
+networks:
+  docker_stack_network:
+    name: docker_stack_network
+    external: true

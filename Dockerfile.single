@@ -1,0 +1,25 @@
+FROM eclipse-temurin:17-jre-jammy
+
+LABEL org.opencontainers.image.title="Spring Boot Docker Stack App"
+LABEL org.opencontainers.image.description="Sample Spring Boot Application for Docker Stack"
+LABEL org.opencontainers.image.version="1.0"
+LABEL org.opencontainers.image.authors="shahbazhrn@gmail.com"
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Use a build ARG so the JAR name is configurable at build time:
+# docker build --build-arg JAR_FILE=target/myapp-1.0.jar .
+ARG JAR_FILE=target/*.jar
+COPY ${JAR_FILE} app.jar
+
+# Run as non-root user
+# Create non-root user (use fixed UID/GID for reproducibility)
+RUN groupadd -r spring && useradd -r -g spring spring && chown spring:spring app.jar
+USER spring
+
+# Expose the port your application will run on
+EXPOSE 8080
+
+# Use ENTRYPOINT for immutable command and CMD for arguments
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

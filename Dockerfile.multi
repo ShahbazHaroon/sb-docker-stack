@@ -1,0 +1,51 @@
+# --------------------
+# Dependency Stage
+# --------------------
+FROM maven:3.9-eclipse-temurin-17 AS dependencies
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy only POM files first to leverage Docker cache
+COPY pom.xml .
+
+# If the projects splits into multiple modules, you'll need to copy all child pom.xml files before dependency:go-offline.
+# Download dependencies as a separate layer — only re-runs when pom.xml changes
+RUN mvn dependency:go-offline -B
+# --------------------
+# Build Stage
+# --------------------
+FROM dependencies AS build
+
+# Copy full source code and build
+COPY src ./src
+RUN mvn clean package -DskipTests -B
+
+# Get the final JAR name from Maven
+RUN echo "Final JAR:" && ls -l target
+# --------------------
+# Runtime Stage
+# --------------------
+FROM eclipse-temurin:17-jre-jammy AS runtime
+
+LABEL org.opencontainers.image.title="Spring Boot Docker Stack App"
+LABEL org.opencontainers.image.description="Sample Spring Boot Application for Docker Stack"
+LABEL org.opencontainers.image.version="1.0"
+LABEL org.opencontainers.image.authors="shahbazhrn@gmail.com"
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy only the built JAR (avoid copying everything) into the container at /app
+COPY --from=build /app/target/*.jar app.jar
+
+# Run as non-root user
+# Create non-root user (use fixed UID/GID for reproducibility)
+RUN groupadd -r spring && useradd -r -g spring spring && chown spring:spring app.jar
+USER spring
+
+# Expose the port your application will run on
+EXPOSE 8080
+
+# Use ENTRYPOINT for immutable command and CMD for arguments
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
